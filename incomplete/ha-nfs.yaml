@@ -1,0 +1,61 @@
+- name: Setup the cluster to create a HA nfs share
+  hosts: hanodes_public
+  gather_facts: false
+  become: true
+  vars_files:
+    - nfs-vars.yaml
+  tasks:
+    - name: Ensure the export directory is created
+      file:
+        path: "{{ mountPoint }}"
+        state: directory
+        mode: '0755'
+    - name: Stop the local inbuild nfs service
+      service:
+        name: "nfs-lock"
+        state: stopped
+        enabled: false
+
+    - name: Print some message
+      debug:
+        msg: "For this configuration I am assuming that you have setup the redundant block storage access medium and shared over the network"
+    
+    # Here I am not performing the following next step as it requires the redundant access storage server
+    # In this case I haven't created a redundant access storage
+    
+    # - name: Mounting the redundant storage access
+    #   command: "pcs resource create {{ share_resource }} FileSystem device=/dev/xvdh directory={{ mountPoint }} fstype={{ nfs_fstype }} --group {{ nfs_group }}"
+    #   when: nfs_group is defined
+    #   delegate_to: "{{ groups['hanodes_public'][0] }}"
+    #   run_once: true
+
+    # - name: Mounting the redundant storage access
+    #   command: "pcs resource create {{ share_resource }} FileSystem device=/dev/xvdh directory={{ mountPoint }} fstype={{ nfs_fstype }}"
+    #   when: nfs_group is not defined
+    #   delegate_to: "{{ groups['hanodes_public'][0] }}"
+    #   run_once: true
+
+    - name: Starting the NFS server
+      command: "pcs resource create {{ nfs_daemon }} nfsserver nfs_shared_infodir={{ nfs_info_location }} --group {{ nfs_group }}"
+      when: nfs_group is defined
+      delegate_to: "{{ groups['hanodes_public'][0] }}"
+      run_once: true
+
+    - name: Starting the NFS server
+      command: "pcs resource create {{ nfs_daemon }} nfsserver nfs_shared_infodir={{ nfs_info_location }}"
+      when: nfs_group is not defined
+      delegate_to: "{{ groups['hanodes_public'][0] }}"
+      run_once: true
+
+    - name: Creating nfs exportfs
+      command: "pcs resource create {{ nfs_exportfs }} exportfs clientspec={{ export_client }} options={{ export_options }} fsid='0' --group {{ nfs_group }}"
+      when: nfs_group is defined
+      delegate_to: "{{ groups['hanodes_public'][0] }}"
+      run_once: true
+    
+    - name: Creating nfs exportfs
+      command: "pcs resource create {{ nfs_exportfs }} exportfs clientspec={{ export_client }} options={{ export_options }} fsid='0'"
+      when: nfs_group is not defined
+      delegate_to: "{{ groups['hanodes_public'][0] }}"
+      run_once: true
+    

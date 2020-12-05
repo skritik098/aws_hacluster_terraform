@@ -1,0 +1,27 @@
+- name: Setting up the 3-nodes ha cluster
+  hosts: test
+  gather_facts: false
+  vars_files:
+    - credentials.yaml
+  tasks:
+    - name: Print host
+      debug:
+        msg: "{{ groups['hanodes'][0] }} {{ groups['hanodes'][1] }} {{ groups['hanodes'][2] }}"
+      run_once: true
+      delegate_to: "{{ groups['test'][1] }}"
+    - name: Running date command
+      command: "date"
+      register: output
+      delegate_to: localhost
+      run_once: true
+      ignore_errors: true
+
+    - name: print the output
+      debug: 
+        msg: "{{ output }}"
+
+    - name: Print host
+      debug:
+        msg: "{{ password  | password_hash('sha512') }}"
+      run_once: true
+      delegate_to: "{{ groups['test'][0] }}"

@@ -1,0 +1,93 @@
+- name: Setting up the 3-nodes ha cluster
+  hosts: hanodes_public
+  gather_facts: false
+  become: true
+  vars_files:
+    - credentials.yaml
+  tasks:
+    - name: Enable the HighAvailability Repo
+      command: "yum-config-manager --enable HighAvailability"
+
+    - name: Install the Packages
+      yum:
+        name:
+          - pacemaker
+          - pcs
+        state: present
+
+    - name: Start the pcs service
+      service:
+        name: "pcsd"
+        state: started
+        enabled: true
+
+    - name: Set the password for the use hacluster
+      user:
+        name: "{{ username }}"
+        password: "{{ password  | password_hash('sha512') }}"
+        update_password: always
+
+    - name: Authenticate the cluster
+      command: "pcs cluster auth {{ groups['hanodes_public'][0] }} {{ groups['hanodes_public'][1] }} {{ groups['hanodes_public'][2] }} {{ groups['hanodes_public'][3] }} -u {{ username }} -p {{ password }}"
+      register: auth_status
+      run_once: true
+      delegate_to: '{{ groups.hanodes_public[0] }}'
+      
+
+    - name: Print the authorization status
+      debug:
+        msg: "{{ auth_status }}"
+      run_once: true
+
+    - name: Gather cluster status
+      command: "pcs cluster status"
+      register: cluster_status
+      ignore_errors: true
+    
+    - name: Setup the HA-Cluster
+      command: "pcs cluster setup --name {{ cluster_name }} {{ groups['hanodes_public'][0] }} {{ groups['hanodes_public'][1] }} {{ groups['hanodes_public'][2] }} {{ groups['hanodes_public'][3] }}"
+      register: setup_status
+      #when: inventory_hostname == hanodes[0]
+      run_once: true
+      delegate_to: "{{ groups['hanodes_public'][0] }}"
+      when: cluster_status.rc | int != 0
+
+    - name: Print the cluster setup output
+      debug:
+        msg: "{{ setup_status }}"
+      run_once: true
+
+    - name: Start the HA-Cluster
+      command: "pcs cluster start --all"
+      register: start_status
+      #when: inventory_hostname == hanodes[0]
+      run_once: true
+      delegate_to: "{{ groups['hanodes_public'][0] }}"
+      when: cluster_status.rc | int != 0
+
+    - name: Print the cluster start output
+      debug:
+        msg: "{{ start_status }}"
+      run_once: true
+
+    - name: Enable the HA-Cluster
+      command: "pcs cluster enable --all"
+      register: enable_status
+      #when: inventory_hostname == hanodes[0]
+      run_once: true
+      delegate_to: "{{ groups['hanodes_public'][0] }}"
+      when: cluster_status.rc | int != 0
+
+    - name: Print the cluster enable output
+      debug:
+        msg: "{{ enable_status }}"
+      run_once: true
+
+    - name: Gather cluster status
+      command: "pcs cluster status"
+      register: status
+
+    - name: Check and print the cluster Status
+      debug:
+        msg: "{{ status }}"
+      run_once: true

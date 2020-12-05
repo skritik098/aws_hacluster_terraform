@@ -1,0 +1,16 @@
+- name: Configure the iscsi target on AWS instance
+  hosts: iscsi
+  become: true
+  roles:
+    - { role: 'OndrejHome.targetcli' }
+  vars:
+    targetcli_package: "targetcli"
+    targetcli_service: "target.service"
+    iscsi_targets:
+      - wwn: 'iqn.2020-12.com.aws:target'
+        disks:
+          - path: '/dev/xvdh'
+            name: 'block1'
+            type: 'block'
+        initiators:
+          - 'iqn.2020-12.com.redhat:client'

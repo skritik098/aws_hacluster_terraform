@@ -1,0 +1,25 @@
+    - name: Install iscsi client package
+      yum:
+        name: "iscsi-initiator-utils"
+        state: present
+
+    - name: Configure the client Initiator
+      command: "sed -i 's/InitiatorName=.*/InitiatorName=iqn.2020-12.com.redhat:client/g' /etc/iscsi/initiatorname.iscsi"
+
+    - name: Restart the iscsid
+      service:
+        name: "iscsid"
+        state: restarted
+
+    - name: Login & Discover to the client
+      open_iscsi:
+        target: 'iqn.2020-12.com.aws:target'
+        portal: "{{ groups['iscsi'][0] }}"
+        login: yes
+        discover: yes
+      register: target
+
+    - name: Attached iscsi block
+      debug:
+        msg: "device Attached as {{ target['devicenodes'] }}"
+        var: target['devicenodes']

@@ -1,0 +1,9 @@
+mountPoint: "/nfsshare"
+share_resource: nfs_share
+nfs_fstype: "xfs"
+nfs_group: "nfs"
+nfs_daemon: "nfsd"
+nfs_info_location: "/nfsshare/nfsinfo"
+nfs_exportfs: "nfsroot"
+export_client: "*"
+export_options: "rw, sync, no_root_squash"

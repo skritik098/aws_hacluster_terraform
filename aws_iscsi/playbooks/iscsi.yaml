@@ -3,6 +3,7 @@
   become: true
   roles:
     - { role: 'OndrejHome.targetcli' }
+    
   vars:
     targetcli_package: "targetcli"
     targetcli_service: "target.service"

@@ -50,6 +50,39 @@ resource "aws_subnet" "storage_subnet" {
   }
 }
 
+resource "aws_internet_gateway" "gw" {
+  depends_on = [ aws_vpc.storage_vpc, aws_subnet.storage_subnet]//  This should only run after the vpc and subnet
+  vpc_id = aws_vpc.storage_vpc.id
+  tags = {
+    "Name" = "storage_gw"
+  }
+}
+
+resource "aws_route_table" "stroute" {
+  depends_on = [ aws_internet_gateway.gw ]
+  vpc_id = aws_vpc.storage_vpc.id
+  route {
+    # This rule is for going or connecting to the public world
+    cidr_block = "0.0.0.0/0" // Represents the destination or where we wants to gp
+    gateway_id = aws_internet_gateway.gw.id // This is the target from where we can go to the respective destination
+  }
+
+  tags = {
+   "Name" = "public-rule"
+  }
+}
+
+resource "aws_route_table_association" "subnetAssociation" {
+  depends_on = [ aws_route_table.stroute ]
+
+  subnet_id = aws_subnet.storage_subnet.id
+  route_table_id = aws_route_table.stroute.id
+}
+
+resource "aws_main_route_table_association" "a" {
+  vpc_id         = aws_vpc.storage_vpc.id
+  route_table_id = aws_route_table.stroute.id
+}
 
 resource "aws_security_group" "storage_rules" {
   depends_on = [ aws_vpc.storage_vpc ]
@@ -72,6 +105,13 @@ resource "aws_security_group" "storage_rules" {
     protocol = "tcp"
     to_port = 3260
   }
+  ingress {
+    cidr_blocks = [ "0.0.0.0/0" ] # Here it mean from where the client can enter i.e client origin
+    description = "Allowing iscsi tcp connectivity"
+    from_port = 860
+    protocol = "tcp"
+    to_port = 860
+  }
   egress {
     cidr_blocks = [ "0.0.0.0/0" ]
     from_port = 0
@@ -86,10 +126,10 @@ resource "aws_security_group" "storage_rules" {
 
 # Now launch the storage server node
 resource "aws_instance" "storage_node" {
-  ami = "ami-08f63db601b82ff5f"
+  ami = var.ami_id
   instance_type = var.instance_type
-  key_name = "ha-key"
-  subnet_id = aws_subnet.hapublic-2.id
+  key_name = "storage-key"
+  subnet_id = aws_subnet.storage_subnet.id
   vpc_security_group_ids = [ aws_security_group.storage_rules.id ]
 }
 
@@ -97,15 +137,14 @@ resource "aws_instance" "storage_node" {
 resource "aws_ebs_volume" "terra-vol" {
   availability_zone = aws_instance.storage_node.availability_zone
   size              = 8
-  multi_attach_enabled = true
   
   tags = {
-    Name = "ebs-vol-2"
+    Name = "ebs-vol"
   }
 }
 
 # Now attach this volume to the ec2 instances
-resource "aws_volume_attachment" "ebs_att-2" {
+resource "aws_volume_attachment" "ebs_att" {
   device_name  = "/dev/sdh"
   volume_id    = aws_ebs_volume.terra-vol.id
   instance_id  = aws_instance.storage_node.id
@@ -136,15 +175,15 @@ resource "null_resource" "setupRemoteStorage" {
 
 # Now we nedd to setup environment for Ansible to run, for this we make use of local-exec & remote-exec modules of terraform
 resource "null_resource" "setupAnsible" {
-  # depends_on = [ aws_instance ]
+  depends_on = [ aws_instance.storage_node ]
   provisioner "local-exec" {
     command = <<EOT
       sleep 20;
       >./playbooks/inventory.ini;
 	export ANSIBLE_HOST_KEY_CHECKING=False;
-    echo "[iscsi]" | tee -a ../playbooks/inventory.ini;
-    echo "${aws_instance.storage_node.public_dns} ansible_user=${var.ansible_user} ansible_ssh_private_key_file=${var.private_key}" | tee -a ../playbooks/inventory.ini;
-    ansible-playbook -i inventory.ini iscsi.yaml;
+    echo "[iscsi]" | tee -a ./playbooks/inventory.ini;
+    echo "${aws_instance.storage_node.public_dns} ansible_user=${var.ansible_user} ansible_ssh_private_key_file=${var.private_key}" | tee -a ./playbooks/inventory.ini;
+    ansible-playbook -i ./playbooks/inventory.ini ./playbooks/iscsi.yaml;
     	EOT
   }
 

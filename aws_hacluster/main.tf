@@ -242,6 +242,7 @@ resource "aws_security_group" "allowed_rules" {
     "Name" = "HA-firewall-rules"
   }
 }
+
 # Now launch the 4 instances in the 2 different public subnets
 
 resource "aws_instance" "ha-nodes-1" {
